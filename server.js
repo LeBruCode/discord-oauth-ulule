@@ -6,41 +6,34 @@ dotenv.config();
 
 const app = express();
 
-/**
- * Route de test
- */
 app.get("/", (req, res) => {
   res.send("Discord OAuth Ulule backend running");
 });
 
-/**
- * Route login -> redirige vers Discord OAuth
- */
 app.get("/login", (req, res) => {
   const redirect = encodeURIComponent(process.env.REDIRECT_URI);
 
-  const discordAuthUrl =
-    `https://discord.com/oauth2/authorize` +
+  const url =
+    "https://discord.com/oauth2/authorize" +
     `?client_id=${process.env.CLIENT_ID}` +
     `&redirect_uri=${redirect}` +
     `&response_type=code` +
     `&scope=identify`;
 
-  res.redirect(discordAuthUrl);
+  res.redirect(url);
 });
 
-/**
- * Route callback -> Discord renvoie ici avec ?code=XXXX
- */
 app.get("/callback", async (req, res) => {
   try {
     const code = req.query.code;
 
     if (!code) {
-      return res.status(400).send("Code OAuth manquant");
+      return res.status(400).send("Aucun code reçu de Discord.");
     }
 
-    // Préparation du body
+    console.log("Code reçu:", code);
+    console.log("Redirect URI utilisée:", process.env.REDIRECT_URI);
+
     const params = new URLSearchParams();
     params.append("client_id", process.env.CLIENT_ID);
     params.append("client_secret", process.env.CLIENT_SECRET);
@@ -48,10 +41,9 @@ app.get("/callback", async (req, res) => {
     params.append("code", code);
     params.append("redirect_uri", process.env.REDIRECT_URI);
 
-    // Échange code -> access_token
     const tokenResponse = await axios.post(
       "https://discord.com/api/oauth2/token",
-      params,
+      params.toString(),
       {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded"
@@ -59,9 +51,10 @@ app.get("/callback", async (req, res) => {
       }
     );
 
+    console.log("Token response:", tokenResponse.data);
+
     const accessToken = tokenResponse.data.access_token;
 
-    // Récupération utilisateur Discord
     const userResponse = await axios.get(
       "https://discord.com/api/users/@me",
       {
@@ -71,27 +64,20 @@ app.get("/callback", async (req, res) => {
       }
     );
 
-    const user = userResponse.data;
+    console.log("User:", userResponse.data);
 
     res.send(`
       <h2>Connexion réussie 🎉</h2>
-      <p>Connecté en tant que : <strong>${user.username}</strong></p>
-      <p>ID Discord : ${user.id}</p>
+      <p>${userResponse.data.username}</p>
     `);
 
   } catch (error) {
-    console.error("Erreur OAuth :", error.response?.data || error.message);
-
-    res.status(500).send(`
-      <h2>Erreur OAuth ❌</h2>
-      <pre>${JSON.stringify(error.response?.data || error.message, null, 2)}</pre>
-    `);
+    console.error("ERREUR COMPLETE:");
+    console.error(error.response?.data || error);
+    res.status(500).send("Erreur OAuth - regarde les logs Render");
   }
 });
 
-/**
- * Lancement serveur
- */
 app.listen(process.env.PORT || 3000, () => {
   console.log("Server started");
 });
